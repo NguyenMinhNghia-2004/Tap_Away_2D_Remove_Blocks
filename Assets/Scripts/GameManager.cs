@@ -115,8 +115,11 @@ public class GameManager : MonoBehaviour
             PlayerPrefs.SetInt(BOOM_KEY, boomCount);
             PlayerPrefs.Save();
             OnBoomCountUpdated?.Invoke(boomCount);
-            
-            // Turn off boom mode after using
+        }
+        
+        // Luôn luôn tắt trạng thái boom sau khi gọi UseBoom (cho dù boomCount ra sao)
+        if (isBoomModeActive)
+        {
             ToggleBoomMode();
         }
     }

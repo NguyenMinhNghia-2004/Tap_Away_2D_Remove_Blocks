@@ -18,7 +18,8 @@ public class Block : MonoBehaviour
     private bool isRemoved = false;
     private bool isMoving = false;
     private bool isBouncing = false;    // Guard chống tap liên tục
-    public bool IsBusy => isMoving || isBouncing;
+    public bool isRotating = false;
+    public bool IsBusy => isMoving || isBouncing || isRotating;
     private Vector2 startPosition;
     public Vector2 truePosition { get; private set; } // The stable position for logic
     private Tween moveTween;
@@ -54,7 +55,8 @@ public class Block : MonoBehaviour
         
         if (GameManager.Instance != null && !GameManager.Instance.IsPlaying) return;
         if (LevelManager.Instance != null && LevelManager.Instance.isTransitioning) return;
-        if (isRemoved || isMoving || isBouncing) return;
+        if (isRemoved || isMoving || isBouncing || isRotating) return;
+        if (TurnObject.IsAnyRotating) return;
 
         // Tránh việc nhấp quá nhanh giữa các block hoặc spam nhấp
         if (Time.time - lastTapTime < tapDelay) return;
@@ -65,6 +67,8 @@ public class Block : MonoBehaviour
             ApplyBomb();
             return;
         }
+
+        if (GameManager.Instance != null && GameManager.Instance.remainingMoves <= 0) return; // Không cho tap tiếp khi hết lượt di chuyển
 
         TryMove();
     }
@@ -222,9 +226,31 @@ public class Block : MonoBehaviour
         }
     }
 
+    public void RotateToPosition(Vector2 targetPos, float duration, System.Action onComplete = null)
+    {
+        isMoving = true;
+        isRotating = true;
+        truePosition = targetPos;
+        transform.DOKill(); // Dừng các animation cũ nếu có để tránh conflict state
+        transform.DOJump(targetPos, 0.5f, 1, duration)
+            .SetEase(Ease.InOutQuad)
+            .OnComplete(() =>
+            {
+                isMoving = false;
+                isRotating = false;
+                // Update position properly just in case
+                transform.position = truePosition;
+                if (LevelManager.Instance != null)
+                {
+                    LevelManager.Instance.CheckGameState();
+                }
+                onComplete?.Invoke();
+            });
+    }
+
     public void OnTriggerEnter2D(Collider2D collision)
     {
-        if (!isMoving || isBouncing) return;
+        if (!isMoving || isBouncing || isRotating) return;
 
         if (collision.CompareTag("Saw"))
         {
@@ -234,7 +260,7 @@ public class Block : MonoBehaviour
             }
             RemoveBlock(true, true);
         }
-        else if (collision.CompareTag("Block"))
+        else if (collision.CompareTag("Block") || collision.CompareTag("Stone"))
         {
             // Nháy đỏ block bị đụng trúng
             Block hitBlock = collision.GetComponent<Block>();
